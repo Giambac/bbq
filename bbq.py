@@ -17,6 +17,11 @@ import argparse
 import json
 import sys
 import os
+
+# Fix Windows console encoding for emoji/unicode output
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 from anthropic import Anthropic

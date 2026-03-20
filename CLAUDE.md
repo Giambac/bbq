@@ -76,6 +76,12 @@ docs/
   design_review.md  — Full analysis of criticalities and solutions
 ```
 
+## Workflow rules
+
+- **Commit and push frequently.** After completing any meaningful unit of work (a feature, a fix, a refactor), commit with a clean, descriptive message and push to GitHub. Never leave work uncommitted — we should never lose progress.
+- Commit messages should be concise and describe *what changed and why*, not just "update files".
+- Push to the remote after every commit so GitHub always reflects the latest state.
+
 ## Code style
 
 - Single file for now (bbq.py), split when it exceeds ~500 lines
