@@ -68,7 +68,8 @@ python bbq.py --max-depth 3 -o tree.json -v "Your complex task"
 ## File structure
 
 ```
-bbq.py              — Main decomposer (Stage 1, working)
+bbq.py              — Stage 1 decomposer (3-call loop, in-memory, working + tested)
+bbq2.py             — Stage 2 decomposer (4-call loop, SQLite, feasibility + pruning)
 README.md           — User-facing docs
 CLAUDE.md           — This file (project context for Claude Code)
 docs/
