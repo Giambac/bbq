@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BBQ Tree Viewer</title>
+<style>
+:root {
+  --bg: #f5f5f5; --bg2: #ffffff; --bg3: #e8e8e8;
+  --text: #1a1a1a; --text2: #555; --text3: #888;
+  --border: #ddd; --border2: #ccc;
+  --green: #2ecc71; --green-bg: #eafaf1;
+  --orange: #e67e22; --orange-bg: #fef5e7;
+  --red: #e74c3c; --red-bg: #fdedec;
+  --gray: #95a5a6; --gray-bg: #f0f0f0;
+  --blue: #3498db; --blue-bg: #ebf5fb;
+  --purple: #9b59b6;
+  --edge-color: #aaa;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --group-colors: #3498db, #e67e22, #9b59b6, #2ecc71, #e74c3c, #1abc9c, #f39c12, #8e44ad;
+}
+[data-theme="dark"] {
+  --bg: #1a1a2e; --bg2: #16213e; --bg3: #0f3460;
+  --text: #e0e0e0; --text2: #aaa; --text3: #777;
+  --border: #2a2a4a; --border2: #3a3a5a;
+  --green: #2ecc71; --green-bg: #1a3a2a;
+  --orange: #e67e22; --orange-bg: #3a2a1a;
+  --red: #e74c3c; --red-bg: #3a1a1a;
+  --gray: #7f8c8d; --gray-bg: #2a2a2a;
+  --blue: #3498db; --blue-bg: #1a2a3a;
+  --purple: #bb86fc;
+  --edge-color: #555;
+  --shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; transition: background 0.3s, color 0.3s;
+}
+/* ── Header ── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; background: var(--bg2);
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+}
+.header h1 { font-size: 20px; font-weight: 700; }
+.header h1 span { color: var(--orange); }
+.header-controls { display: flex; gap: 12px; align-items: center; }
+.btn {
+  padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--text); cursor: pointer;
+  font-size: 13px; transition: all 0.2s;
+}
+.btn:hover { background: var(--bg3); }
+.theme-toggle { font-size: 18px; padding: 4px 8px; }
+
+/* ── Drop zone ── */
+.drop-zone {
+  max-width: 600px; margin: 80px auto; padding: 60px 40px;
+  border: 3px dashed var(--border2); border-radius: 16px;
+  text-align: center; transition: all 0.3s; cursor: pointer;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--blue); background: var(--blue-bg);
+}
+.drop-zone h2 { font-size: 22px; margin-bottom: 8px; }
+.drop-zone p { color: var(--text2); margin-bottom: 16px; }
+.drop-zone input[type="file"] { display: none; }
+
+/* ── Metadata bar ── */
+.meta-bar {
+  padding: 10px 24px; background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--text2);
+}
+.meta-item b { color: var(--text); }
+
+/* ── Tree container ── */
+.tree-container {
+  padding: 32px 24px; overflow-x: auto;
+}
+.tree-root { display: flex; flex-direction: column; align-items: center; }
+
+/* ── Node ── */
+.tree-node { position: relative; display: flex; flex-direction: column; align-items: center; }
+.node-box {
+  position: relative; min-width: 220px; max-width: 320px;
+  padding: 12px 16px; border-radius: 10px;
+  background: var(--bg2); border: 2px solid var(--border);
+  box-shadow: var(--shadow); cursor: pointer;
+  transition: all 0.2s; font-size: 13px;
+}
+.node-box:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+
+/* Status colors */
+.node-box.status-leaf { border-color: var(--green); background: var(--green-bg); }
+.node-box.status-decomposed { border-color: var(--orange); background: var(--orange-bg); }
+.node-box.status-pruned { border-color: var(--red); background: var(--red-bg); opacity: 0.7; }
+.node-box.status-pending,
+.node-box.status-max-depth,
+.node-box.status-error { border-color: var(--gray); background: var(--gray-bg); }
+
+/* Group border highlight */
+.node-box[data-group-color] { border-left-width: 5px; }
+
+.node-task { font-weight: 600; line-height: 1.4; margin-bottom: 6px; }
+.node-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 600;
+}
+.badge-status { background: var(--bg3); color: var(--text2); }
+.badge-rel { background: var(--blue-bg); color: var(--blue); }
+.badge-group { font-size: 10px; color: var(--text3); }
+.badge-feasibility {
+  background: var(--bg3); font-size: 11px; letter-spacing: 1px;
+}
+.badge-pruned { background: var(--red-bg); color: var(--red); }
+
+/* ── Edge labels ── */
+.edge-label {
+  position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; font-weight: 700; color: var(--text3);
+  white-space: nowrap; pointer-events: none;
+}
+
+/* ── Children ── */
+.children-container {
+  display: flex; gap: 12px; margin-top: 0;
+  padding-top: 0; position: relative; justify-content: center;
+}
+.child-wrapper {
+  display: flex; flex-direction: column; align-items: center; position: relative;
+}
+
+/* ── Connector lines (SVG drawn dynamically) ── */
+.connectors-svg {
+  width: 100%; overflow: visible; pointer-events: none;
+}
+.connector-line { stroke: var(--edge-color); stroke-width: 2; fill: none; }
+
+/* ── Collapse toggle ── */
+.collapse-toggle {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--bg2); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 12px; font-weight: 700;
+  color: var(--text2); margin: 8px 0; z-index: 2; transition: all 0.2s;
+}
+.collapse-toggle:hover { background: var(--blue-bg); border-color: var(--blue); }
+
+/* ── Detail panel ── */
+.detail-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4); z-index: 200; justify-content: center; align-items: center;
+}
+.detail-overlay.visible { display: flex; }
+.detail-panel {
+  background: var(--bg2); border-radius: 14px; padding: 28px;
+  max-width: 640px; width: 90%; max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2); position: relative;
+}
+.detail-close {
+  position: absolute; top: 12px; right: 16px;
+  background: none; border: none; font-size: 22px;
+  cursor: pointer; color: var(--text2);
+}
+.detail-panel h2 { font-size: 18px; margin-bottom: 16px; padding-right: 30px; }
+.detail-section { margin-bottom: 14px; }
+.detail-section label {
+  display: block; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text3); margin-bottom: 4px; font-weight: 700;
+}
+.detail-section .value {
+  font-size: 14px; line-height: 1.5; color: var(--text);
+  background: var(--bg); padding: 8px 12px; border-radius: 6px;
+}
+.feasibility-bar {
+  display: inline-flex; gap: 3px; align-items: center;
+}
+.feas-block {
+  width: 20px; height: 14px; border-radius: 3px; background: var(--bg3);
+}
+.feas-block.filled { background: var(--orange); }
+.feas-block.filled.high { background: var(--green); }
+.feas-block.filled.low { background: var(--red); }
+
+/* ── Legend ── */
+.legend {
+  max-width: 900px; margin: 24px auto;
+  padding: 20px 24px; background: var(--bg2);
+  border-radius: 12px; border: 1px solid var(--border);
+}
+.legend h3 { font-size: 14px; margin-bottom: 12px; }
+.legend-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px; font-size: 13px;
+}
+.legend-item { display: flex; align-items: center; gap: 8px; }
+.legend-swatch {
+  width: 16px; height: 16px; border-radius: 4px; border: 2px solid; flex-shrink: 0;
+}
+.legend-symbol { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .children-container { flex-direction: column; align-items: center; gap: 8px; }
+  .node-box { min-width: 180px; }
+}
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1><span>BBQ</span> Tree Viewer</h1>
+    <div class="header-controls">
+      <button class="btn" id="loadBtn" style="display:none" onclick="document.getElementById('reloadFile').click()">Load another file</button>
+      <input type="file" id="reloadFile" accept=".json" style="display:none">
+      <button class="btn" id="expandAllBtn" style="display:none" onclick="expandAll()">Expand all</button>
+      <button class="btn" id="collapseAllBtn" style="display:none" onclick="collapseAll()">Collapse all</button>
+      <button class="btn theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode">🌓</button>
+    </div>
+  </div>
+
+  <div id="dropZone" class="drop-zone">
+    <h2>Drop a BBQ JSON file here</h2>
+    <p>or click to select a file</p>
+    <button class="btn">Choose file</button>
+    <input type="file" id="fileInput" accept=".json">
+  </div>
+
+  <div id="metaBar" class="meta-bar" style="display:none"></div>
+  <div id="treeContainer" class="tree-container" style="display:none">
+    <div id="treeRoot" class="tree-root"></div>
+  </div>
+  <div id="legend" class="legend" style="display:none">
+    <h3>Legend</h3>
+    <div class="legend-grid">
+      <div class="legend-item"><div class="legend-swatch" style="background:#eafaf1;border-color:#2ecc71"></div> Leaf (directly doable)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fef5e7;border-color:#e67e22"></div> Decomposed</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fdedec;border-color:#e74c3c"></div> Pruned</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#f0f0f0;border-color:#95a5a6"></div> Pending / Max-depth</div>
+      <div class="legend-item"><span class="legend-symbol">◆</span> Sufficient</div>
+      <div class="legend-item"><span class="legend-symbol">●</span> Necessary</div>
+      <div class="legend-item"><span class="legend-symbol">◐</span> Co-sufficient</div>
+      <div class="legend-item"><span class="legend-symbol" style="font-size:13px">█░</span> Feasibility (1-5)</div>
+    </div>
+  </div>
+
+  <div id="detailOverlay" class="detail-overlay" onclick="if(event.target===this)closeDetail()">
+    <div class="detail-panel" id="detailPanel">
+      <button class="detail-close" onclick="closeDetail()">&times;</button>
+      <h2 id="detailTitle"></h2>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+<script>
+// ── State ──
+let treeData = null;
+let collapsedNodes = new Set();
+const GROUP_COLORS = ['#3498db','#e67e22','#9b59b6','#2ecc71','#e74c3c','#1abc9c','#f39c12','#8e44ad','#2c3e50','#d35400'];
+const REL_SYMBOLS = { sufficient: '◆', necessary: '●', 'co-sufficient': '◐' };
+
+// ── Theme ──
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+  localStorage.setItem('bbq-theme', isDark ? 'light' : 'dark');
+}
+(function initTheme() {
+  const saved = localStorage.getItem('bbq-theme');
+  if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+
+// ── File loading ──
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const reloadFile = document.getElementById('reloadFile');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) loadFile(e.target.files[0]); });
+reloadFile.addEventListener('change', e => { if (e.target.files.length) loadFile(e.target.files[0]); });
+
+// Auto-load from URL param
+(function autoLoad() {
+  const params = new URLSearchParams(window.location.search);
+  const file = params.get('file');
+  if (file) {
+    fetch(file).then(r => r.json()).then(data => { processData(data); })
+      .catch(() => {});
+  }
+})();
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      processData(data);
+    } catch (err) {
+      alert('Invalid JSON file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function processData(data) {
+  // Handle both Stage 1 (flat tree) and Stage 2 (metadata wrapper)
+  let tree, metadata = null;
+  if (data.tree && data.metadata) {
+    tree = data.tree;
+    metadata = data.metadata;
+  } else {
+    tree = data;
+  }
+  treeData = tree;
+  collapsedNodes.clear();
+  // Collapse depth > 1 by default
+  collapseDeep(tree, 1);
+  dropZone.style.display = 'none';
+  document.getElementById('loadBtn').style.display = '';
+  document.getElementById('expandAllBtn').style.display = '';
+  document.getElementById('collapseAllBtn').style.display = '';
+  document.getElementById('legend').style.display = '';
+  renderMeta(metadata);
+  renderTree();
+}
+
+function collapseDeep(node, maxExpanded) {
+  if (node.children && node.children.length && node.depth >= maxExpanded) {
+    collapsedNodes.add(node.id);
+  }
+  if (node.children) node.children.forEach(c => collapseDeep(c, maxExpanded));
+}
+
+// ── Metadata bar ──
+function renderMeta(meta) {
+  const bar = document.getElementById('metaBar');
+  if (!meta) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const items = [];
+  if (meta.root_task) items.push(`<b>Task:</b> ${esc(meta.root_task.substring(0, 80))}`);
+  if (meta.model) items.push(`<b>Model:</b> ${esc(meta.model)}`);
+  if (meta.total_nodes) items.push(`<b>Nodes:</b> ${meta.total_nodes}`);
+  if (meta.total_calls) items.push(`<b>LLM calls:</b> ${meta.total_calls}`);
+  if (meta.total_pruned && meta.total_pruned !== '0') items.push(`<b>Pruned:</b> ${meta.total_pruned}`);
+  if (meta.elapsed_seconds) items.push(`<b>Time:</b> ${meta.elapsed_seconds}s`);
+  if (meta.min_feasibility) items.push(`<b>Min feasibility:</b> ${meta.min_feasibility}/5`);
+  bar.innerHTML = items.map(i => `<span class="meta-item">${i}</span>`).join('');
+}
+
+// ── Tree rendering ──
+function renderTree() {
+  const container = document.getElementById('treeContainer');
+  container.style.display = '';
+  const root = document.getElementById('treeRoot');
+  root.innerHTML = '';
+  root.appendChild(buildNodeEl(treeData));
+  // Draw connectors after layout settles
+  requestAnimationFrame(() => requestAnimationFrame(drawAllConnectors));
+}
+
+function buildNodeEl(node) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tree-node';
+  wrapper.dataset.nodeId = node.id;
+
+  // Node box
+  const box = document.createElement('div');
+  const statusClass = (node.status || 'pending').replace(/\s+/g, '-');
+  box.className = `node-box status-${statusClass}`;
+
+  // Group color on left border
+  const group = node.group || node.group_id || 0;
+  if (group > 0 && node.depth > 0) {
+    const gColor = GROUP_COLORS[(group - 1) % GROUP_COLORS.length];
+    box.style.borderLeftColor = gColor;
+    box.style.borderLeftWidth = '5px';
+  }
+
+  // Edge label (relationship)
+  if (node.relationship_to_parent || node.relationship) {
+    const rel = node.relationship_to_parent || node.relationship;
+    const sym = REL_SYMBOLS[rel] || '?';
+    const label = document.createElement('div');
+    label.className = 'edge-label';
+    label.textContent = `${sym} ${rel}`;
+    box.appendChild(label);
+  }
+
+  // Task text
+  const task = document.createElement('div');
+  task.className = 'node-task';
+  task.textContent = node.task.length > 80 ? node.task.substring(0, 77) + '...' : node.task;
+  box.appendChild(task);
+
+  // Badges row
+  const badges = document.createElement('div');
+  badges.className = 'node-badges';
+
+  // Status badge
+  const statusIcons = { leaf: '✅', decomposed: '🌿', pruned: '✂', pending: '⏳', 'max-depth': '⚠', error: '❌' };
+  const sb = document.createElement('span');
+  sb.className = 'badge badge-status';
+  sb.textContent = `${statusIcons[node.status] || '?'} ${node.status}`;
+  badges.appendChild(sb);
+
+  // Group badge
+  if (group > 0) {
+    const gb = document.createElement('span');
+    gb.className = 'badge badge-group';
+    gb.textContent = `g${group}`;
+    gb.style.color = GROUP_COLORS[(group - 1) % GROUP_COLORS.length];
+    badges.appendChild(gb);
+  }
+
+  // Feasibility badge
+  const feas = node.feasibility;
+  if (feas != null) {
+    const fb = document.createElement('span');
+    fb.className = 'badge badge-feasibility';
+    fb.textContent = '█'.repeat(feas) + '░'.repeat(5 - feas);
+    fb.title = `Feasibility: ${feas}/5`;
+    if (feas >= 4) fb.style.color = 'var(--green)';
+    else if (feas <= 2) fb.style.color = 'var(--red)';
+    else fb.style.color = 'var(--orange)';
+    badges.appendChild(fb);
+  }
+
+  // Pruned reason
+  if (node.pruned_reason) {
+    const pb = document.createElement('span');
+    pb.className = 'badge badge-pruned';
+    pb.textContent = '✂ ' + (node.pruned_reason.length > 30 ? node.pruned_reason.substring(0, 28) + '...' : node.pruned_reason);
+    badges.appendChild(pb);
+  }
+
+  box.appendChild(badges);
+  box.addEventListener('click', e => { e.stopPropagation(); showDetail(node); });
+  wrapper.appendChild(box);
+
+  // Children
+  const children = node.children || [];
+  if (children.length > 0) {
+    const isCollapsed = collapsedNodes.has(node.id);
+
+    // Collapse toggle button
+    const toggle = document.createElement('div');
+    toggle.className = 'collapse-toggle';
+    toggle.textContent = isCollapsed ? `+${children.length}` : '−';
+    toggle.title = isCollapsed ? 'Expand children' : 'Collapse children';
+    toggle.addEventListener('click', e => {
+      e.stopPropagation();
+      if (collapsedNodes.has(node.id)) collapsedNodes.delete(node.id);
+      else collapsedNodes.add(node.id);
+      renderTree();
+    });
+    wrapper.appendChild(toggle);
+
+    if (!isCollapsed) {
+      // SVG placeholder for connectors
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.classList.add('connectors-svg');
+      svg.style.height = '24px';
+      svg.dataset.parentId = node.id;
+      wrapper.appendChild(svg);
+
+      const childrenContainer = document.createElement('div');
+      childrenContainer.className = 'children-container';
+      children.forEach(child => {
+        const cw = document.createElement('div');
+        cw.className = 'child-wrapper';
+        cw.appendChild(buildNodeEl(child));
+        childrenContainer.appendChild(cw);
+      });
+      wrapper.appendChild(childrenContainer);
+    }
+  }
+
+  return wrapper;
+}
+
+// ── Connector lines ──
+function drawAllConnectors() {
+  document.querySelectorAll('.connectors-svg').forEach(svg => {
+    const parentNode = svg.closest('.tree-node');
+    const parentBox = parentNode.querySelector(':scope > .node-box');
+    const childrenContainer = parentNode.querySelector(':scope > .children-container');
+    if (!parentBox || !childrenContainer) return;
+
+    const childBoxes = childrenContainer.querySelectorAll(':scope > .child-wrapper > .tree-node > .node-box');
+    if (!childBoxes.length) return;
+
+    const parentRect = parentBox.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+
+    // Resize SVG to span full width of children
+    const containerRect = childrenContainer.getBoundingClientRect();
+    const fullWidth = Math.max(containerRect.width, parentRect.width);
+    svg.style.width = fullWidth + 'px';
+    svg.style.position = 'relative';
+    svg.style.left = '50%';
+    svg.style.transform = 'translateX(-50%)';
+    svg.setAttribute('width', fullWidth);
+    svg.setAttribute('height', 24);
+    svg.innerHTML = '';
+
+    const svgNewRect = svg.getBoundingClientRect();
+    const parentCx = parentRect.left + parentRect.width / 2 - svgNewRect.left;
+
+    childBoxes.forEach(childBox => {
+      const childRect = childBox.getBoundingClientRect();
+      const childCx = childRect.left + childRect.width / 2 - svgNewRect.left;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const midY = 12;
+      path.setAttribute('d', `M ${parentCx} 0 L ${parentCx} ${midY} L ${childCx} ${midY} L ${childCx} 24`);
+      path.classList.add('connector-line');
+      svg.appendChild(path);
+    });
+  });
+}
+window.addEventListener('resize', () => requestAnimationFrame(drawAllConnectors));
+
+// ── Detail panel ──
+function showDetail(node) {
+  const overlay = document.getElementById('detailOverlay');
+  const title = document.getElementById('detailTitle');
+  const content = document.getElementById('detailContent');
+
+  title.textContent = node.task;
+  let html = '';
+
+  // Status
+  html += section('Status', node.status || 'unknown');
+
+  // Relationship
+  if (node.relationship_to_parent || node.relationship) {
+    const rel = node.relationship_to_parent || node.relationship;
+    const sym = REL_SYMBOLS[rel] || '';
+    const group = node.group || node.group_id || 0;
+    html += section('Relationship', `${sym} ${rel}` + (group ? ` (group ${group})` : ''));
+  }
+
+  // Feasibility
+  if (node.feasibility != null) {
+    const feas = node.feasibility;
+    let color = feas >= 4 ? 'high' : feas <= 2 ? 'low' : '';
+    const blocks = Array.from({length: 5}, (_, i) =>
+      `<span class="feas-block ${i < feas ? 'filled ' + color : ''}"></span>`
+    ).join('');
+    html += `<div class="detail-section"><label>Feasibility</label><div class="value"><div class="feasibility-bar">${blocks}</div> ${feas}/5</div></div>`;
+  }
+  if (node.feasibility_reason) html += section('Feasibility Reason', node.feasibility_reason);
+
+  // Evaluation
+  if (node.can_do_directly != null) html += section('Can Do Directly', node.can_do_directly ? 'Yes' : 'No');
+  if (node.evaluation_reason) html += section('Evaluation Reason', node.evaluation_reason);
+
+  // Question
+  if (node.question_asked) html += section('Question Asked', node.question_asked);
+
+  // Pruning
+  if (node.pruned_reason) html += section('Pruned Reason', node.pruned_reason);
+
+  // Depth
+  html += section('Depth', node.depth);
+
+  content.innerHTML = html;
+  overlay.classList.add('visible');
+}
+
+function closeDetail() { document.getElementById('detailOverlay').classList.remove('visible'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+function section(label, value) {
+  return `<div class="detail-section"><label>${esc(label)}</label><div class="value">${esc(String(value))}</div></div>`;
+}
+
+// ── Expand/Collapse all ──
+function expandAll() { collapsedNodes.clear(); renderTree(); }
+function collapseAll() {
+  function walk(node) {
+    if (node.children && node.children.length) {
+      collapsedNodes.add(node.id);
+      node.children.forEach(walk);
+    }
+  }
+  if (treeData) { walk(treeData); collapsedNodes.delete(treeData.id); renderTree(); }
+}
+
+// ── Util ──
+function esc(str) {
+  const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+}
+</script>
+</body>
+</html>

@@ -396,7 +396,8 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Anthropic model (default: {DEFAULT_MODEL})")
     parser.add_argument("-o", "--output", help="Save JSON output to file")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show LLM call details")
-    
+    parser.add_argument("--viewer", action="store_true", help="Open interactive viewer in browser after decomposition")
+
     args = parser.parse_args()
     
     # Check API key
@@ -420,6 +421,19 @@ def main():
         with open(args.output, "w") as f:
             json.dump(result, f, indent=2)
         print(f"💾 Tree saved to {args.output}")
+
+    if args.viewer:
+        import webbrowser
+        import pathlib
+        viewer_json = pathlib.Path(__file__).parent / ".bbq_last_output.json"
+        with open(viewer_json, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+        viewer_html = pathlib.Path(__file__).parent / "viewer.html"
+        if viewer_html.exists():
+            webbrowser.open(viewer_html.as_uri() + "?file=.bbq_last_output.json")
+            print(f"🌐 Opened viewer in browser")
+        else:
+            print(f"⚠ viewer.html not found at {viewer_html}")
 
 
 if __name__ == "__main__":
