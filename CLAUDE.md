@@ -4,16 +4,23 @@
 
 BBQ is an architecture for LLM-based task decomposition. It takes a complex (but clear, unambiguous) task and recursively breaks it into subtasks using a tree-search approach. The core insight is that the agent doesn't jump straight to subtasks — it first finds the *right question to ask* about a task, then answers that question to produce classified subtasks.
 
-## Current state: Stage 1 (bare minimum decomposer)
+## Current state: Stage 3 (MCTS + execution)
 
-`bbq.py` is a working CLI tool that implements the core 3-call loop:
-1. **Evaluator** — "Can this task be done directly?" → yes = leaf, no = continue
-2. **Question finder** — "What question reveals the causal precursors?" → produces one well-formed question
-3. **Decomposer** — Answers the question → produces subtasks classified as sufficient/necessary/co-sufficient
+Three implementations exist, each building on the last:
 
-Uses BFS traversal, Anthropic API (Claude Sonnet), no database yet (in-memory dicts), outputs a tree to terminal + optional JSON export.
+### Stage 1 — `bbq.py` (bare minimum decomposer)
+Core 3-call loop (evaluate → question → decompose). BFS traversal, in-memory dicts. Tested and working with live API calls.
 
-**It has NOT been tested with live API calls yet.** The data structures and tree output are verified working.
+### Stage 2 — `bbq2.py` (feasibility + pruning)
+Adds 4th LLM call for feasibility scoring (1-5), pruning (low feasibility + rule violations), SQLite persistence. Tested and working.
+
+### Stage 3 — `bbq3.py` (MCTS + execution)
+Replaces BFS with MCTS (UCB1 selection, LLM imagination rollouts, backpropagation). Adds:
+- **Tool execution layer** — classifies leaf tasks by action type (code, web_search, file_io, human, reasoning) and dispatches to executors
+- **Trial execution** — instead of just asking "can I do this?", tries doing it with a small budget
+- **Resource budgets** — max wall-clock time, max API calls, max nodes
+- **Solution-or-explanation contract** — returns either an actionable solution path or a structured unsatisfiability report
+- **Human-in-the-loop** — prompts user interactively for tasks requiring human action
 
 ## Architecture decisions made
 
@@ -37,17 +44,21 @@ These are the problems identified during the design phase that future stages nee
 
 ## Roadmap
 
-### Stage 2 (next)
-- Add feasibility scoring (1-5 scale) to each node
-- Add pruning: rule violations, impossibilities, low-feasibility cutoff
-- Replace in-memory storage with SQLite (nodes + edges tables)
-- JSON export with full metadata
+### Stage 1 — DONE
+- Core 3-call loop, BFS, in-memory, CLI
 
-### Stage 3 (later)
-- Search loop with MCTS-style rollouts instead of pure BFS
-- Tool execution layer (web search, code execution, file I/O)
-- Resource budgets (max time, max cost, max API calls)
-- Return either solution path or structured explanation of unsatisfiability
+### Stage 2 — DONE
+- Feasibility scoring, pruning, SQLite, enhanced JSON
+
+### Stage 3 — DONE
+- MCTS search, tool execution, resource budgets, solution path extraction
+
+### Stage 4 (future)
+- Real tool implementations (sandboxed code execution, web search API integration)
+- Multi-model support (pluggable adapter pattern for different LLM providers)
+- Parallel MCTS rollouts for faster search
+- Learning from past decompositions (reuse subtree patterns)
+- Web UI for interactive tree editing and execution monitoring
 
 ## Tech stack
 
@@ -61,8 +72,17 @@ These are the problems identified during the design phase that future stages nee
 ```bash
 pip install anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
+
+# Stage 1 — simple decomposition
 python bbq.py "Make me $1000 legally by today"
-python bbq.py --max-depth 3 -o tree.json -v "Your complex task"
+
+# Stage 2 — with feasibility scoring and pruning
+python bbq2.py --min-feasibility 2 -o tree.json "Your complex task"
+
+# Stage 3 — MCTS search with execution
+python bbq3.py --budget-time 300 --mcts-iter 20 "Your complex task"
+python bbq3.py --no-execute -o tree.json "Plan only, no execution"
+python bbq3.py -v --db tree.db --viewer "Full run with viewer"
 ```
 
 ## File structure
@@ -70,6 +90,7 @@ python bbq.py --max-depth 3 -o tree.json -v "Your complex task"
 ```
 bbq.py              — Stage 1 decomposer (3-call loop, in-memory, working + tested)
 bbq2.py             — Stage 2 decomposer (4-call loop, SQLite, feasibility + pruning)
+bbq3.py             — Stage 3 decomposer (MCTS, execution layer, resource budgets)
 viewer.html         — Interactive tree visualizer (drag-drop JSON, dark/light mode)
 README.md           — User-facing docs
 CLAUDE.md           — This file (project context for Claude Code)
