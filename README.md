@@ -16,11 +16,18 @@ Tasks are grouped into **sufficiency groups** — each group represents one comp
 ## Setup
 
 ```bash
-pip install anthropic
+# Clone the repo
+git clone https://github.com/Giambac/bbq.git
+cd bbq
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set your Anthropic API key
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Requires Python 3.10+ and an Anthropic API key.
+Requires Python 3.10+ and an [Anthropic API key](https://console.anthropic.com/settings/keys). The only external dependency is the `anthropic` SDK — everything else is Python standard library.
 
 ---
 
